@@ -310,7 +310,8 @@ if __name__ == "__main__":
         f"{args.batch_size}_{args.total_env_steps}_nenvs:{args.num_envs}_" + \
         f"criticwidth:{args.critic_network_width}_actorwidth:{args.actor_network_width}_" + \
         f"criticdepth:{args.critic_depth}_actordepth:{args.actor_depth}_" + \
-        f"actorskip:{args.actor_skip_connections}_criticskip:{args.critic_skip_connections}_{args.seed}"
+        f"actorskip:{args.actor_skip_connections}_criticskip:{args.critic_skip_connections}_+" \
+        f"{args.seed}"
     print(f"run_name: {run_name}", flush=True)
 
     if args.track:
@@ -601,7 +602,7 @@ if __name__ == "__main__":
         params={
             "sa_encoder": sa_encoder_params,
             "g_encoder": g_encoder_params
-            },
+        },
         tx=optax.adam(learning_rate=args.critic_lr),
     )
 
