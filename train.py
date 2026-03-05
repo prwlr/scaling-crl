@@ -32,8 +32,8 @@ class Args:
     torch_deterministic: bool = True
     cuda: bool = True
     track: bool = True
-    wandb_project_name: str = "clean_JaxGCRL_test"
-    wandb_entity: str = 'wang-kevin3290-princeton-university'
+    wandb_project_name: str = 'scaling-crl'
+    wandb_entity: str = 'oskar-e-moberg'
     wandb_mode: str = 'offline'
     wandb_dir: str = '.'
     wandb_group: str = '.'
