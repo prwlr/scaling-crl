@@ -8,3 +8,4 @@ uv.lock
 *.venv/
 /runs/*
 *_key
+*.egg-info
