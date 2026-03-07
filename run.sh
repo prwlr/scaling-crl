@@ -5,12 +5,12 @@
 
 million=$((10**6))
 
-# env_steps=$((100 * $million)) # About 21 hours @ 1 env
-env_steps=$((10 * $million)) # About 17 minutes @ 256 envs
+env_steps=$((100 * $million)) # About 21 hours @ 1 env
+# env_steps=$((10 * $million)) # About 17 minutes @ 256 envs
 # env_steps=$((1 * $million)) # About 3 minutes @ 256 envs
 
-# batch_size=2048 # Doable at depth 16 with 256 envs
-batch_size=2048
+# batch_size=8192 # Doable at depth 16 with 256 envs
+batch_size=512
 
 # Run the training
 python train.py \
