@@ -5,7 +5,7 @@
 
 million=$((10**6))
 
-env_steps=$((100 * $million)) # About 21 hours @ 1 env
+env_steps=$((100 * $million)) # About 2.3 hours @ 256 envs
 # env_steps=$((10 * $million)) # About 17 minutes @ 256 envs
 # env_steps=$((1 * $million)) # About 3 minutes @ 256 envs
 
@@ -25,7 +25,8 @@ python train.py \
   --critic_skip_connections 4 \
   --batch_size $batch_size \
   --vis_length 1000 \
-  --save_buffer 0
+  --save_buffer 0 \
+  --from_checkpoint_path $1
 
 # Sync run with the local server
 # wandb sync wandb/latest-run

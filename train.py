@@ -40,6 +40,7 @@ class Args:
     capture_vis: bool = True
     vis_length: int = 1000
     checkpoint: bool = True
+    from_checkpoint_path: str = ''
 
     # environment specific arguments
     env_id: str = "humanoid"  # "ant_big_maze" "humanoid_u_maze" "arm_binpick_hard"
@@ -560,6 +561,28 @@ if __name__ == "__main__":
     eval_env.step = jax.jit(eval_env.step)
 
     # Network setup
+    # Load params from checkpoint if from_checkpoint_path is non-empty
+    if args.from_checkpoint_path:
+        params = load_params(args.from_checkpoint_path)
+        alpha_params = params[0]
+        actor_params = params[1]
+        critic_params = params[2]
+
+    else:
+        alpha_params = {"log_alpha": log_alpha}
+        actor_params = actor.init(actor_key, np.ones([1, obs_size]))
+        critic_params = {
+            "sa_encoder": sa_encoder.init(
+                sa_key,
+                np.ones([1, args.obs_dim]),
+                np.ones([1, action_size]),
+            ),
+            "g_encoder": g_encoder.init(
+                g_key,
+                np.ones([1, args.goal_end_idx - args.goal_start_idx]),
+            ),
+        }
+
     # Actor
     actor = Actor(
         action_size=action_size,
@@ -570,7 +593,7 @@ if __name__ == "__main__":
     )
     actor_state = TrainState.create(
         apply_fn=actor.apply,
-        params=actor.init(actor_key, np.ones([1, obs_size])),
+        params=actor_params,
         tx=optax.adam(learning_rate=args.actor_lr)
     )
 
@@ -581,28 +604,15 @@ if __name__ == "__main__":
         skip_connections=args.critic_skip_connections,
         use_relu=args.use_relu
     )
-    sa_encoder_params = sa_encoder.init(
-        sa_key,
-        np.ones([1, args.obs_dim]),
-        np.ones([1, action_size]),
-    )
     g_encoder = G_encoder(
         network_width=args.critic_network_width,
         network_depth=args.critic_depth,
         skip_connections=args.critic_skip_connections,
         use_relu=args.use_relu,
     )
-    g_encoder_params = g_encoder.init(
-        g_key,
-        np.ones([1, args.goal_end_idx - args.goal_start_idx]),
-    )
-
     critic_state = TrainState.create(
         apply_fn=None,
-        params={
-            "sa_encoder": sa_encoder_params,
-            "g_encoder": g_encoder_params
-        },
+        params=critic_params,
         tx=optax.adam(learning_rate=args.critic_lr),
     )
 
@@ -612,7 +622,7 @@ if __name__ == "__main__":
     log_alpha = jnp.asarray(0.0, dtype=jnp.float32)
     alpha_state = TrainState.create(
         apply_fn=None,
-        params={"log_alpha": log_alpha},
+        params=alpha_params,
         tx=optax.adam(learning_rate=args.alpha_lr),
     )
 
