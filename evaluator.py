@@ -29,6 +29,7 @@ class CrlEvaluator():
 
         self._key = key
         self._eval_walltime = 0.
+        self._episode_length = episode_length
 
         eval_env = envs.training.EvalWrapper(eval_env)
 
@@ -81,6 +82,9 @@ class CrlEvaluator():
             metrics["eval/episode_success_any"] = np.mean(
                 eval_metrics.episode_metrics["success"] > 0.0
             )
+            metrics["eval/episode_success_fraction_of_max"] = np.mean(
+                eval_metrics.episode_metrics["success"]
+            ) / self._episode_length
 
         metrics["eval/avg_episode_length"] = np.mean(eval_metrics.episode_steps)
         metrics["eval/epoch_eval_time"] = epoch_eval_time
