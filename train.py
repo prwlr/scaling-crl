@@ -1150,11 +1150,12 @@ if __name__ == "__main__":
         epoch_training_time = time.time() - t
         training_walltime += epoch_training_time
 
-        sps = (
+        # Previously just 'sps'
+        envsteps_per_second = (
             args.env_steps_per_actor_step * args.num_training_steps_per_epoch
         ) / epoch_training_time
         metrics = {
-            "training/sps": sps,
+            "training/envsteps_per_second": envsteps_per_second,
             "training/walltime": training_walltime,
             "training/envsteps": training_state.env_steps.item(),
             **{f"training/{name}": value for name, value in metrics.items()},

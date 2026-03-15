@@ -12,20 +12,22 @@ fi
 
 # It should hold that:
 # env_steps / (num_epochs * num_envs) >= episode_length
-num_epochs=8
+num_epochs=16
 num_envs=128
 
 # million=$((10**6))
+bin_million=$((2**20)) # Ca. a million
 # env_steps=$((100 * $million)) # About 2.3 hours @ 256 envs
 # env_steps=$((10 * $million)) # About 17 minutes @ 256 envs
 # env_steps=$((1 * $million)) # About 3 minutes @ 256 envs
-env_steps=$((2**20)) # Ca. a million
+env_steps=$((2 * $bin_million))
 
 # batch_size=8192 # Doable at depth 16 with 256 envs
 batch_size=512
 
 # Run the training
 python train.py \
+  --project_name "scaling-crl" \
   --env_id "humanoid" \
   --eval_env_id "humanoid" \
   --episode_length 1024 \
@@ -42,6 +44,7 @@ python train.py \
   $CHECKPOINT_ARG
 
 # Symlink the lastest run in script directory
+rm ./latest-run -r
 ln -sf ./runs/$(ls ./runs/ | tail -1)/ ./latest-run
 
 # Sync run with the local server
