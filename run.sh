@@ -12,11 +12,11 @@ fi
 
 # NOTE: Take care that there are enough env_steps
 # for envs to complete an episode each, each unroll
-unroll_length=64 # Number of samples in-between optimisations
-num_epochs=128 # Number of datapoints
+unroll_length=16 # Number of samples (per env.) in-between optimisations
+num_epochs=64 # Number of datapoints and evaluations
 
 # Limited to 256 @ 16GB
-num_envs=256
+num_envs=128
 num_eval_envs=128
 
 # million=$((10**6))
@@ -24,7 +24,7 @@ bin_million=$((2**20)) # Approx. a million
 # env_steps=$((100 * $million)) # About 2.3 hours @ 256 envs
 # env_steps=$((10 * $million)) # About 17 minutes @ 256 envs
 # env_steps=$((1 * $million)) # About 3 minutes @ 256 envs
-env_steps=$((32 * $bin_million))
+env_steps=$((8 * $bin_million))
 
 # batch_size=8192 # Doable at depth 16 with 256 envs
 batch_size=512

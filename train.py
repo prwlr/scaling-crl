@@ -15,8 +15,8 @@ import jax.numpy as jnp
 
 from brax import envs
 from etils import epath
-from dataclasses import dataclass
 from typing import NamedTuple, Any
+from dataclasses import dataclass, asdict
 from wandb_osh.hooks import TriggerWandbSyncHook
 from flax.training.train_state import TrainState
 from flax.linen.initializers import variance_scaling
@@ -286,9 +286,12 @@ def save_params(path: str, params: Any):
         fout.write(pickle.dumps(params))
 
 
-if __name__ == "__main__":
-
-    args = tyro.cli(Args)
+def main(
+    args: Args | None = None
+) -> float | None:
+    # If not passed, read args from cli
+    if args is None:
+        args = tyro.cli(Args)
 
     # Print every arg
     print("Arguments:", flush=True)
@@ -1245,6 +1248,9 @@ if __name__ == "__main__":
             pickle.dump(args, f)
         print(f"Saved args to {save_path}/args.pkl", flush=True)
 
+    # Log the hyperparameters of the run
+    mlflow.log_params(asdict(args))
+
     # After training is complete, save the replay buffer
     # (if save_buffer is 1, this takes a lot of memory)
     if args.checkpoint:
@@ -1272,3 +1278,6 @@ if __name__ == "__main__":
     if args.track and not args.use_wandb:
         print("Ending mlflow run")
         mlflow.end_run()
+
+if __name__ == "__main__":
+    main()
