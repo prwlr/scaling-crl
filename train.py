@@ -165,7 +165,7 @@ class SA_encoder(nn.Module):
         x = normalize(x)
         x = activation(x)
         # Residual blocks
-        for i in range(self.network_depth // skip_connections):
+        for i in range(self.network_depth // 4):
             x = residual_block(x, self.network_width, normalize, activation)
         # Final layer
         x = nn.Dense(64, kernel_init=lecun_unfirom, bias_init=bias_init)(x)
@@ -203,7 +203,7 @@ class G_encoder(nn.Module):
         x = normalize(x)
         x = activation(x)
         # Residual blocks
-        for i in range(self.network_depth // skip_connections):
+        for i in range(self.network_depth // 4):
             x = residual_block(x, self.network_width, normalize, activation)
         # Final layer
         x = nn.Dense(64, kernel_init=lecun_unfirom, bias_init=bias_init)(x)
@@ -242,7 +242,7 @@ class Actor(nn.Module):
         x = normalize(x)
         x = activation(x)
         # Residual blocks
-        for i in range(self.network_depth // skip_connections):
+        for i in range(self.network_depth // 4):
             x = residual_block(x, self.network_width, normalize, activation)
         # Final layer
         mean = nn.Dense(self.action_size, kernel_init=lecun_unfirom, bias_init=bias_init)(x)
