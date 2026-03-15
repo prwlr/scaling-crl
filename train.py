@@ -895,7 +895,7 @@ if __name__ == "__main__":
         metrics = {
             "sample_entropy": -log_prob,
             "actor_loss": actorloss,
-            "alph_aloss": alphaloss,
+            "alpha_loss": alphaloss,
             "log_alpha": training_state.alpha_state.params["log_alpha"],
         }
 
@@ -1163,7 +1163,7 @@ if __name__ == "__main__":
 
         metrics = evaluator.run_evaluation(training_state, metrics)
 
-        print(f"epoch {ne} out of {args.num_epochs} complete. metrics: {metrics}", flush=True)
+        print(f"epoch {(ne + 1)} out of {args.num_epochs} complete. metrics: {metrics}", flush=True)
 
         if args.checkpoint:
             if ne < 5 or ne >= args.num_epochs - 5 or ne % 10 == 0:
@@ -1178,12 +1178,12 @@ if __name__ == "__main__":
 
         if args.track:
             if args.use_wandb:
-                wandb.log(metrics, step=ne)
+                wandb.log(metrics, step=(ne + 1))
 
                 if args.wandb_mode == 'offline':
                     trigger_sync()
             else:
-                mlflow.log_metrics(metrics, step=ne)
+                mlflow.log_metrics(metrics, step=(ne + 1))
 
         hours_passed = (time.time() - start_time) / 3600
         print(f"Time elapsed: {hours_passed:.3f} hours", flush=True)
