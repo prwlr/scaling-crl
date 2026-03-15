@@ -1,6 +1,7 @@
 /wandb
 mlflow.db
 mlruns/
+latest-run
 .ipynb_checkpoints/
 /slurm_logs
 __pycache__/

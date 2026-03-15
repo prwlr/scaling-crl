@@ -7,6 +7,7 @@ import optax
 import wandb
 import pickle
 import random
+import mlflow
 import wandb_osh
 import numpy as np
 import flax.linen as nn
@@ -32,19 +33,20 @@ class Args:
     torch_deterministic: bool = True
     cuda: bool = True
     track: bool = True
-    wandb_project_name: str = 'scaling-crl'
+    project_name: str = 'scaling-crl'
     wandb_entity: str = 'oskar-e-moberg'
     wandb_mode: str = 'offline'
     wandb_dir: str = '.'
     wandb_group: str = '.'
+    use_wandb: bool = False
     capture_vis: bool = True
-    vis_length: int = 1000
+    vis_length: int = 1024
     checkpoint: bool = True
     from_checkpoint_path: str = ''
 
     # environment specific arguments
     env_id: str = "humanoid"  # "ant_big_maze" "humanoid_u_maze" "arm_binpick_hard"
-    episode_length: int = 1000
+    episode_length: int = 1024
     # to be filled in runtime
     obs_dim: int = 0
     goal_start_idx: int = 0
@@ -63,10 +65,10 @@ class Args:
     gamma: float = 0.99
     logsumexp_penalty_coeff: float = 0.1
 
-    max_replay_size: int = 10000
-    min_replay_size: int = 1000
+    max_replay_size: int = 8192
+    min_replay_size: int = 1024
 
-    unroll_length: int = 62
+    unroll_length: int = 64
 
     critic_network_width: int = 256
     actor_network_width: int = 256
@@ -317,29 +319,41 @@ if __name__ == "__main__":
 
     if args.track:
 
-        if args.wandb_group == '.':
-            args.wandb_group = None
+        if args.use_wandb:
+            if args.wandb_group == '.':
+                args.wandb_group = None
 
-        wandb.init(
-            project=args.wandb_project_name,
-            entity=args.wandb_entity,
-            mode=args.wandb_mode,
-            group=args.wandb_group,
-            dir=args.wandb_dir,
-            config=vars(args),
-            name=run_name,
-            monitor_gym=True,
-            save_code=True,
-        )
+            wandb.init(
+                project=args.project_name,
+                entity=args.wandb_entity,
+                mode=args.wandb_mode,
+                group=args.wandb_group,
+                dir=args.wandb_dir,
+                config=vars(args),
+                name=run_name,
+                monitor_gym=True,
+                save_code=True,
+            )
 
-        if args.wandb_mode == 'offline':
-            wandb_osh.set_log_level("ERROR")
-            trigger_sync = TriggerWandbSyncHook()
+            if args.wandb_mode == 'offline':
+                wandb_osh.set_log_level("ERROR")
+                trigger_sync = TriggerWandbSyncHook()
+        else:
+            # Get experiment if exists, otherwise create it
+            experiment = mlflow.get_experiment_by_name(args.project_name)
+            if experiment is None:
+                experiment_id = mlflow.create_experiment(name=args.project_name)
+            else:
+                experiment_id = experiment.experiment_id
+
+            print("Starting mlflow run")
+            mlflow.start_run(experiment_id=experiment_id, run_name=run_name)
 
     if args.checkpoint:
         from pathlib import Path
         from datetime import datetime
         short_run_name = f"runs/{args.env_id}_{args.seed}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        # TODO: Changer save path to not be dependent on wandb
         save_path = Path(args.wandb_dir) / Path(short_run_name)
         os.mkdir(path=save_path)
 
@@ -561,28 +575,6 @@ if __name__ == "__main__":
     eval_env.step = jax.jit(eval_env.step)
 
     # Network setup
-    # Load params from checkpoint if from_checkpoint_path is non-empty
-    if args.from_checkpoint_path:
-        params = load_params(args.from_checkpoint_path)
-        alpha_params = params[0]
-        actor_params = params[1]
-        critic_params = params[2]
-
-    else:
-        alpha_params = {"log_alpha": log_alpha}
-        actor_params = actor.init(actor_key, np.ones([1, obs_size]))
-        critic_params = {
-            "sa_encoder": sa_encoder.init(
-                sa_key,
-                np.ones([1, args.obs_dim]),
-                np.ones([1, action_size]),
-            ),
-            "g_encoder": g_encoder.init(
-                g_key,
-                np.ones([1, args.goal_end_idx - args.goal_start_idx]),
-            ),
-        }
-
     # Actor
     actor = Actor(
         action_size=action_size,
@@ -590,11 +582,6 @@ if __name__ == "__main__":
         network_depth=args.actor_depth,
         skip_connections=args.actor_skip_connections,
         use_relu=args.use_relu,
-    )
-    actor_state = TrainState.create(
-        apply_fn=actor.apply,
-        params=actor_params,
-        tx=optax.adam(learning_rate=args.actor_lr)
     )
 
     # Critic
@@ -610,6 +597,37 @@ if __name__ == "__main__":
         skip_connections=args.critic_skip_connections,
         use_relu=args.use_relu,
     )
+
+    # Load params from checkpoint if from_checkpoint_path is non-empty
+    if args.from_checkpoint_path:
+        params = load_params(args.from_checkpoint_path)
+        alpha_params = params[0]
+        actor_params = params[1]
+        critic_params = params[2]
+
+    else:
+        alpha_params = {"log_alpha": jnp.asarray(0.0, dtype=jnp.float32)}
+        actor_params = actor.init(actor_key, np.ones([1, obs_size]))
+        critic_params = {
+            "sa_encoder": sa_encoder.init(
+                sa_key,
+                np.ones([1, args.obs_dim]),
+                np.ones([1, action_size]),
+            ),
+            "g_encoder": g_encoder.init(
+                g_key,
+                np.ones([1, args.goal_end_idx - args.goal_start_idx]),
+            ),
+        }
+
+    # Actor state
+    actor_state = TrainState.create(
+        apply_fn=actor.apply,
+        params=actor_params,
+        tx=optax.adam(learning_rate=args.actor_lr)
+    )
+
+    # Critic state
     critic_state = TrainState.create(
         apply_fn=None,
         params=critic_params,
@@ -619,7 +637,6 @@ if __name__ == "__main__":
     # Entropy coefficient
     # action_size = 8 for ant, 17 for humanoid, etc
     target_entropy = -args.entropy_param * action_size
-    log_alpha = jnp.asarray(0.0, dtype=jnp.float32)
     alpha_state = TrainState.create(
         apply_fn=None,
         params=alpha_params,
@@ -1159,10 +1176,13 @@ if __name__ == "__main__":
                 save_params(path, params)
 
         if args.track:
-            wandb.log(metrics, step=ne)
+            if args.use_wandb:
+                wandb.log(metrics, step=ne)
 
-            if args.wandb_mode == 'offline':
-                trigger_sync()
+                if args.wandb_mode == 'offline':
+                    trigger_sync()
+            else:
+                mlflow.log_metrics(metrics, step=ne)
 
         hours_passed = (time.time() - start_time) / 3600
         print(f"Time elapsed: {hours_passed:.3f} hours", flush=True)
@@ -1207,7 +1227,10 @@ if __name__ == "__main__":
             render_path = f"{save_path}/vis.html"
             with open(render_path, "w") as f:
                 f.write(html_string)
-            wandb.log({"vis": wandb.Html(html_string)})
+            if args.use_wandb:
+                wandb.log({"vis": wandb.Html(html_string)})
+            else:
+                mlflow.log_artifact(render_path)
 
         print("Rendering final policy...", flush=True)
         try:
@@ -1244,3 +1267,7 @@ if __name__ == "__main__":
                 print(f"Saved replay_buffer to {buffer_path}", flush=True)
             except Exception as e:
                 print(f"Error saving final replay buffer: {e}", flush=True)
+    # End mlflow run
+    if args.track and not args.use_wandb:
+        print("Ending mlflow run")
+        mlflow.end_run()
