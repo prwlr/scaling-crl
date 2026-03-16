@@ -10,7 +10,7 @@ fi
 # Login to local wandb instance
 # wandb login --host=http://localhost:8080
 
-# NOTE: Take care that there are enough env_steps
+# NOTE: Take care that there are enough total_env_steps
 # for envs to complete an episode each, each unroll
 unroll_length=16 # Number of samples (per env.) in-between optimisations
 num_epochs=64 # Number of datapoints and evaluations
@@ -21,10 +21,10 @@ num_eval_envs=128
 
 # million=$((10**6))
 bin_million=$((2**20)) # Approx. a million
-# env_steps=$((100 * $million)) # About 2.3 hours @ 256 envs
-# env_steps=$((10 * $million)) # About 17 minutes @ 256 envs
-# env_steps=$((1 * $million)) # About 3 minutes @ 256 envs
-env_steps=$((8 * $bin_million))
+# total_env_steps=$((100 * $million)) # About 2.3 hours @ 256 envs
+# total_env_steps=$((10 * $million)) # About 17 minutes @ 256 envs
+# total_env_steps=$((1 * $million)) # About 3 minutes @ 256 envs
+total_env_steps=$((8 * $bin_million))
 
 # batch_size=8192 # Doable at depth 16 with 256 envs
 batch_size=512
@@ -38,7 +38,7 @@ python train.py \
   --num_epochs $num_epochs \
   --num_envs $num_envs \
   --num_eval_envs $num_eval_envs \
-  --total_env_steps $env_steps \
+  --total_env_steps $total_env_steps \
   --critic_depth 16 \
   --actor_depth 16 \
   --actor_skip_connections 4 \
