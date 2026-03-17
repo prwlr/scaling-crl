@@ -12,7 +12,7 @@ fi
 
 # NOTE: Take care that there are enough total_env_steps
 # for envs to complete an episode each, each unroll
-unroll_length=16 # Number of samples (per env.) in-between optimisations
+unroll_length=64 # Number of samples (per env.) in-between optimisations
 num_epochs=64 # Number of datapoints and evaluations
 
 # Limited to 256 @ 16GB
@@ -48,6 +48,9 @@ python train.py \
   --vis_length 1024 \
   --save_buffer 0 \
   $CHECKPOINT_ARG
+
+  # --return_metric "eval/episode_reward" \
+  # --no_capture_vis \
 
 # Symlink the lastest run in script directory
 rm ./latest-run -r
