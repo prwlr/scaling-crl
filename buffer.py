@@ -39,7 +39,7 @@ class TrajectoryUniformSamplingQueue():
         dummy_flatten, self._unflatten_fn = flatten_util.ravel_pytree(dummy_data_sample)
         self._unflatten_fn = jax.vmap(jax.vmap(self._unflatten_fn))
         data_size = len(dummy_flatten)
-        print(f"data_size: {data_size}", flush=True)
+        # print(f"data_size: {data_size}", flush=True)
 
         self._data_shape = (max_replay_size, num_envs, data_size)
         self._data_dtype = dummy_flatten.dtype
@@ -60,7 +60,7 @@ class TrajectoryUniformSamplingQueue():
         """Insert data into the replay buffer."""
         self.check_can_insert(buffer_state, samples, 1)
         return self.insert_internal(buffer_state, samples)
-    
+
     def check_can_insert(self, buffer_state, samples, shards):
         """Checks whether insert operation can be performed."""
         assert isinstance(shards, int), "This method should not be JITed."
@@ -159,13 +159,13 @@ class TrajectoryUniformSamplingQueue():
         '''
         The function create_batch will be called for every envs_idxs of buffer_state.data and every row of matrix.
         Because every row of matrix has consecutive indices of self.episode_length, for every
-        envs_idx of envs_idxs, we will sample a random self.episode_length length sequence from 
-        buffer_state.data[:, envs_idx, :]. But I don't think the code ensures that this sequence 
+        envs_idx of envs_idxs, we will sample a random self.episode_length length sequence from
+        buffer_state.data[:, envs_idx, :]. But I don't think the code ensures that this sequence
         won't be across episodes?
 
         flatten_crl_fn takes care of this
         '''
-        print(f"buffer_state.data[:, envs_idxs, :].shape: {buffer_state.data[:, envs_idxs, :].shape}", flush=True)
+        # print(f"buffer_state.data[:, envs_idxs, :].shape: {buffer_state.data[:, envs_idxs, :].shape}", flush=True)
         batch = create_batch_vmaped(buffer_state.data[:, envs_idxs, :], matrix)
         transitions = self._unflatten_fn(batch)
         return buffer_state.replace(key=key), transitions
@@ -180,8 +180,8 @@ class TrajectoryUniformSamplingQueue():
         seq_len = transition.observation.shape[0]
         arrangement = jnp.arange(seq_len)
         is_future_mask = jnp.array(arrangement[:, None] < arrangement[None], dtype=jnp.float32) # upper triangular matrix of shape seq_len, seq_len where all non-zero entries are 1
-        discount = gamma ** jnp.array(arrangement[None] - arrangement[:, None], dtype=jnp.float32)        
-        probs = is_future_mask * discount  
+        discount = gamma ** jnp.array(arrangement[None] - arrangement[:, None], dtype=jnp.float32)
+        probs = is_future_mask * discount
 
         # probs is an upper triangular matrix of shape seq_len, seq_len of the form:
         #    [[0.        , 0.99      , 0.98010004, 0.970299  , 0.960596 ],
@@ -191,7 +191,7 @@ class TrajectoryUniformSamplingQueue():
         #    [0.        , 0.        , 0.        , 0.        , 0.        ]]
         # assuming seq_len = 5
         # the same result can be obtained using probs = is_future_mask * (gamma ** jnp.cumsum(is_future_mask, axis=-1))
-        
+
         single_trajectories = jnp.concatenate(
             [transition.extras["state_extras"]["seed"][:, jnp.newaxis].T] * seq_len, axis=0
         )
@@ -199,18 +199,18 @@ class TrajectoryUniformSamplingQueue():
         # timesteps collected from the same episode will have the same seed. All rows of the single_trajectories are same.
 
         probs = probs * jnp.equal(single_trajectories, single_trajectories.T) + jnp.eye(seq_len) * 1e-5
-        #ith row of probs will be non zero only for time indices that 
+        #ith row of probs will be non zero only for time indices that
         # 1) are greater than i
         # 2) have the same seed as the ith time index
 
         goal_index = jax.random.categorical(sample_key, jnp.log(probs))
-        future_state = jnp.take(transition.observation, goal_index[:-1], axis=0) #the last goal_index cannot be considered as there is no future.  
+        future_state = jnp.take(transition.observation, goal_index[:-1], axis=0) #the last goal_index cannot be considered as there is no future.
         future_action = jnp.take(transition.action, goal_index[:-1], axis=0)
         goal = future_state[:, goal_start_idx : goal_end_idx]
         future_state = future_state[:, : obs_dim]
         state = transition.observation[:-1, : obs_dim] #all states are considered
-        new_obs = jnp.concatenate([state, goal], axis=1) 
-        # BASICALLY HERE, for each state in the 1000 time-steps, we are creating a new observation by 
+        new_obs = jnp.concatenate([state, goal], axis=1)
+        # BASICALLY HERE, for each state in the 1000 time-steps, we are creating a new observation by
         # appending the goal to the state (where the goal is extracted from the future state, which
         # is sampled with geometric of gamma of the same trajectory)
 
@@ -232,7 +232,7 @@ class TrajectoryUniformSamplingQueue():
             discount=jnp.squeeze(transition.discount[:-1]),
             extras=extras,
         )
-    
+
     def size(self, buffer_state: ReplayBufferState) -> int:
         return (
             buffer_state.insert_position - buffer_state.sample_position

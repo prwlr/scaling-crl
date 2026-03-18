@@ -33,16 +33,19 @@ class Args:
     torch_deterministic: bool = True
     cuda: bool = True
     track: bool = True
-    project_name: str = 'scaling-crl'
-    wandb_entity: str = 'oskar-e-moberg'
-    wandb_mode: str = 'offline'
-    wandb_dir: str = '.'
-    wandb_group: str = '.'
+    project_name: str = "scaling-crl"
+    wandb_entity: str = "oskar-e-moberg"
+    wandb_mode: str = "offline"
+    wandb_dir: str = "."
+    wandb_group: str = "."
     use_wandb: bool = False
     capture_vis: bool = True
     vis_length: int = 1024
     checkpoint: bool = True
-    from_checkpoint_path: str = ''
+    from_checkpoint_path: str = ""
+    return_metric: str | None = None
+    return_denominator: str | None = None
+    should_print: bool = False
 
     # environment specific arguments
     env_id: str = "humanoid"  # "ant_big_maze" "humanoid_u_maze" "arm_binpick_hard"
@@ -275,14 +278,14 @@ class Transition(NamedTuple):
 
 
 def load_params(path: str):
-    with epath.Path(path).open('rb') as fin:
+    with epath.Path(path).open("rb") as fin:
         buf = fin.read()
     return pickle.loads(buf)
 
 
 def save_params(path: str, params: Any):
     """Saves parameters in flax format."""
-    with epath.Path(path).open('wb') as fout:
+    with epath.Path(path).open("wb") as fout:
         fout.write(pickle.dumps(params))
 
 
@@ -293,24 +296,11 @@ def main(
     if args is None:
         args = tyro.cli(Args)
 
-    # Print every arg
-    print("Arguments:", flush=True)
-    for arg, value in vars(args).items():
-        print(f"{arg}: {value}", flush=True)
-    print("\n", flush=True)
-
     args.env_steps_per_actor_step = args.num_envs * args.unroll_length
-    print(f"env_steps_per_actor_step: {args.env_steps_per_actor_step}", flush=True)
-
     args.num_prefill_env_steps = args.min_replay_size * args.num_envs
-    print(f"num_prefill_env_steps: {args.num_prefill_env_steps}", flush=True)
-
     args.num_prefill_actor_steps = np.ceil(args.min_replay_size / args.unroll_length)
-    print(f"num_prefill_actor_steps: {args.num_prefill_actor_steps}", flush=True)
-
     args.num_training_steps_per_epoch = (args.total_env_steps - args.num_prefill_env_steps) \
         // (args.num_epochs * args.env_steps_per_actor_step)
-    print(f"num_training_steps_per_epoch: {args.num_training_steps_per_epoch}", flush=True)
 
     run_name = f"{args.env_id}{'_' + args.eval_env_id if args.eval_env_id else ''}_" + \
         f"{args.batch_size}_{args.total_env_steps}_nenvs:{args.num_envs}_" + \
@@ -318,12 +308,24 @@ def main(
         f"criticdepth:{args.critic_depth}_actordepth:{args.actor_depth}_" + \
         f"actorskip:{args.actor_skip_connections}_criticskip:{args.critic_skip_connections}_+" \
         f"{args.seed}"
-    print(f"run_name: {run_name}", flush=True)
+
+    if args.should_print:
+        # Print every arg
+        print("Arguments:", flush=True)
+        for arg, value in vars(args).items():
+            print(f"{arg}: {value}", flush=True)
+        print("\n", flush=True)
+
+        print(f"env_steps_per_actor_step: {args.env_steps_per_actor_step}", flush=True)
+        print(f"num_prefill_env_steps: {args.num_prefill_env_steps}", flush=True)
+        print(f"num_prefill_actor_steps: {args.num_prefill_actor_steps}", flush=True)
+        print(f"num_training_steps_per_epoch: {args.num_training_steps_per_epoch}", flush=True)
+        print(f"run_name: {run_name}", flush=True)
 
     if args.track:
 
         if args.use_wandb:
-            if args.wandb_group == '.':
+            if args.wandb_group == ".":
                 args.wandb_group = None
 
             wandb.init(
@@ -338,7 +340,7 @@ def main(
                 save_code=True,
             )
 
-            if args.wandb_mode == 'offline':
+            if args.wandb_mode == "offline":
                 wandb_osh.set_log_level("ERROR")
                 trigger_sync = TriggerWandbSyncHook()
         else:
@@ -349,8 +351,13 @@ def main(
             else:
                 experiment_id = experiment.experiment_id
 
-            print("Starting mlflow run")
+            if args.should_print:
+                print("Starting mlflow run")
             mlflow.start_run(experiment_id=experiment_id, run_name=run_name)
+
+            # Log the hyperparameters of the run
+            mlflow.log_params(asdict(args))
+
 
     if args.checkpoint:
         from pathlib import Path
@@ -366,7 +373,8 @@ def main(
     key, buffer_key, env_key, eval_env_key, actor_key, sa_key, g_key = jax.random.split(key, 7)
 
     def make_env(env_id=args.env_id):
-        print(f"making env with env_id: {env_id}", flush=True)
+        if args.should_print:
+            print(f"making env with env_id: {env_id}", flush=True)
         if env_id == "reacher":
             from envs.reacher import Reacher
             env = Reacher(
@@ -414,8 +422,9 @@ def main(
                 gen_idx = env_id.find("gen")
                 maze_layout_name = env_id[4:gen_idx - 1]
                 generalization_config = env_id[gen_idx + 4:]
-                print(f"maze_layout_name: {maze_layout_name}, "
-                      + f"generalization_config: {generalization_config}", flush=True)
+                if args.should_print:
+                    print(f"maze_layout_name: {maze_layout_name}, "
+                          + f"generalization_config: {generalization_config}", flush=True)
                 env = AntMazeGeneralization(
                     backend="spring",
                     exclude_current_positions_from_observation=False,
@@ -562,7 +571,8 @@ def main(
     env_state = jax.jit(env.reset)(env_keys)
     env.step = jax.jit(env.step)
 
-    print(f"obs_size: {obs_size}, action_size: {action_size}", flush=True)
+    if args.should_print:
+        print(f"obs_size: {obs_size}, action_size: {action_size}", flush=True)
 
     if not args.eval_env_id:
         args.eval_env_id = args.env_id
@@ -878,7 +888,7 @@ def main(
         (actorloss, log_prob), actor_grad = jax.value_and_grad(actor_loss, has_aux=True)(
             training_state.actor_state.params,
             training_state.critic_state.params,
-            training_state.alpha_state.params['log_alpha'],
+            training_state.alpha_state.params["log_alpha"],
             transitions,
             key,
         )
@@ -1133,7 +1143,8 @@ def main(
         )
 
     training_walltime = 0
-    print('starting training....', flush=True)
+    if args.should_print:
+        print("starting training....", flush=True)
     start_time = time.time()
     for ne in range(args.num_epochs):
 
@@ -1166,7 +1177,8 @@ def main(
 
         metrics = evaluator.run_evaluation(training_state, metrics)
 
-        print(f"epoch {(ne + 1)} out of {args.num_epochs} complete. metrics: {metrics}", flush=True)
+        if args.should_print:
+            print(f"epoch {(ne + 1)} out of {args.num_epochs} complete. metrics: {metrics}", flush=True)
 
         if args.checkpoint:
             if ne < 5 or ne >= args.num_epochs - 5 or ne % 10 == 0:
@@ -1183,13 +1195,14 @@ def main(
             if args.use_wandb:
                 wandb.log(metrics, step=(ne + 1))
 
-                if args.wandb_mode == 'offline':
+                if args.wandb_mode == "offline":
                     trigger_sync()
             else:
                 mlflow.log_metrics(metrics, step=(ne + 1))
 
         hours_passed = (time.time() - start_time) / 3600
-        print(f"Time elapsed: {hours_passed:.3f} hours", flush=True)
+        if args.should_print:
+            print(f"Time elapsed: {hours_passed:.3f} hours", flush=True)
 
     if args.checkpoint:
         # Save current policy and critic params.
@@ -1236,7 +1249,8 @@ def main(
             else:
                 mlflow.log_artifact(render_path)
 
-        print("Rendering final policy...", flush=True)
+        if args.should_print:
+            print("Rendering final policy...", flush=True)
         try:
             render_policy(training_state, save_path)
         except Exception as e:
@@ -1244,40 +1258,54 @@ def main(
 
     # After training is complete, save the Args
     if args.checkpoint:
-        with open(f"{save_path}/args.pkl", 'wb') as f:
+        with open(f"{save_path}/args.pkl", "wb") as f:
             pickle.dump(args, f)
-        print(f"Saved args to {save_path}/args.pkl", flush=True)
-
-    # Log the hyperparameters of the run
-    mlflow.log_params(asdict(args))
+        if args.should_print:
+            print(f"Saved args to {save_path}/args.pkl", flush=True)
 
     # After training is complete, save the replay buffer
     # (if save_buffer is 1, this takes a lot of memory)
     if args.checkpoint:
         if args.save_buffer:
-            print(
-                "Saving final buffer_state and buffer data "
-                + "(everything needed to recreate replay_buffer)...",
-                flush=True,
-            )
+            if args.should_print:
+                print(
+                    "Saving final buffer_state and buffer data "
+                    + "(everything needed to recreate replay_buffer)...",
+                    flush=True,
+                )
             try:
                 buffer_path = f"{save_path}/final_buffer.pkl"
                 buffer_data = {
-                    'buffer_state': buffer_state,
-                    'max_replay_size': args.max_replay_size,
-                    'batch_size': args.batch_size,
-                    'num_envs': args.num_envs,
-                    'episode_length': args.episode_length,
+                    "buffer_state": buffer_state,
+                    "max_replay_size": args.max_replay_size,
+                    "batch_size": args.batch_size,
+                    "num_envs": args.num_envs,
+                    "episode_length": args.episode_length,
                 }
-                with open(buffer_path, 'wb') as f:
+                with open(buffer_path, "wb") as f:
                     pickle.dump(buffer_data, f)
-                print(f"Saved replay_buffer to {buffer_path}", flush=True)
+                if args.should_print:
+                    print(f"Saved replay_buffer to {buffer_path}", flush=True)
             except Exception as e:
                 print(f"Error saving final replay buffer: {e}", flush=True)
     # End mlflow run
     if args.track and not args.use_wandb:
-        print("Ending mlflow run")
+        if args.should_print:
+            print("Ending mlflow run")
         mlflow.end_run()
+
+    if args.return_metric is not None or args.return_denominator is not None:
+        # Calculate the metric to return
+        numerator = float(metrics[args.return_metric]) if args.return_metric is not None else 1
+        denominator = float(metrics[args.return_denominator]) if args.return_denominator is not None else 1
+        metric = numerator / denominator
+        metric = metric if isinstance(metric, float) else -float("inf")  # Ensure no NaNs
+
+        if args.should_print:
+            print("Using numerator:", numerator, "and denominator:", denominator)
+            print("Returning metric:", metric)
+
+        return metric
 
 if __name__ == "__main__":
     main()

@@ -63,7 +63,7 @@ class CrlEvaluator():
             # (np.min, "_min"),
         ]
 
-        print("Available keys in episode_metrics:", eval_metrics.episode_metrics.keys())
+        # print("Available keys in episode_metrics:", eval_metrics.episode_metrics.keys())
         for (fn, suffix) in aggregating_fns:
             metrics.update(
                 {
